@@ -1,5 +1,5 @@
 # Clinical-Trial-Analysis-and-Reporting
-##Overview
+Overview
 This project focuses on analyzing the demographic and baseline characteristics of participants in a randomized clinical trial. The goal is to evaluate patient diversity and ensure balanced treatment groups using statistical summaries and visual representations. The analysis is conducted using SAS programming, a widely used tool in clinical data management and reporting.
 
 The dataset consists of 100 patient records with variables such as age, gender, race, and treatment groups. The study aims to provide insights into patient demographics and ensure proper data representation, forming the foundation for further clinical evaluations and decision-making.
