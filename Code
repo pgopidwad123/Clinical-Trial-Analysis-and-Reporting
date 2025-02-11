@@ -1,0 +1,201 @@
+/* Generated Code (IMPORT) */
+/* Source File: Data.xlsx */
+/* Source Path: /home/u64149101 */
+/* Code generated on: 2/5/25, 12:25 PM */
+
+%web_drop_table(WORK.Patients);
+
+
+FILENAME REFFILE '/home/u64149101/Data.xlsx';
+
+PROC IMPORT DATAFILE=REFFILE
+	DBMS=XLSX
+	OUT=WORK.Patients;
+	GETNAMES=YES;
+RUN;
+
+PROC CONTENTS DATA=WORK.Patients; RUN;
+
+
+%web_open_table(WORK.Patients);
+
+/*Creating patients_age dataset*/
+data patients_age;
+   set patients;                    
+   format dob1 date9.;
+   dob = compress(cat(month,'/',day,'/',year));
+   dob1 = input(dob, mmddyy10.);
+   age = (diagdt-dob1)/365;
+   output;
+   TRT = 2;
+   output;
+   run;
+/*Building age_stats*/
+ proc sort data = patients_age;
+ by TRT;
+ run;
+ 
+ proc means data = patients_age noprint;
+ var Age;
+ output out = Age_stats;
+ by TRT;
+ run;
+ data age_stats;
+    set age_stats;
+    length value $10;
+    ord = 1;
+    If _STAT_ = 'N' then do; subord=1;value = strip(put(age,8.));end;
+    else If _STAT_ = 'MEAN' then do; subord = 2;value = strip(put(age,8.1));end;
+    else If _STAT_ = 'STD' then do; subord = 3;value = strip(put(age,8.2));end;
+    else If _STAT_ = 'MIN' then do; subord = 4;value = strip(put(age,8.1));end;
+    else If _STAT_ = 'MAX' then do;subord = 5;value = strip(put(age,8.1));end;
+    rename _STAT_ = stat;
+    drop _TYPE_ _FREQ_ age;
+    run;
+ 
+ /*building age_group_stats*/
+/*creating a dataset containing age group column*/
+data patients_age_grp;
+   length age_grp $15;
+   set patients_age;
+   If age <= 18 then age_grp ='<18 years';
+   else If age > 18 and age <= 65 then age_grp ='18 to 65 years';
+   else If age > 65 then age_grp ='>65 years';
+run;
+
+/*deriving stats for age_group variabe*/
+proc freq data = patients_age_grp noprint;
+table trt*age_grp/outpct out = age_grp_stats;
+run;
+/*concatenating count and percentage*/
+ data age_grp_stats;
+    set age_grp_stats;
+    Value = cat(count,' (',strip(put(round(pct_row,.1),8.1)),'%)');
+    ord = 2;
+    if value = '<18 years' then subord=1;
+    if value = '18 to 65 years' then subord=2;
+    else subord=3;
+run;  
+data age_grp_stats;
+   set age_grp_stats;
+   rename age_grp = stat;
+   drop COUNT PERCENT PCT_ROW PCT_COL;
+   run;
+
+/*Building gender stats*/
+/*creating a column with sex variable*/
+proc format;
+value genfmt
+1 = 'Male'
+2 = 'Female'
+;
+run;
+data patients_sex;
+    set patients_age;
+    sex = put(gender,genfmt.);
+run;
+/*deriving stats for sex variable*/
+proc freq data = patients_sex noprint;
+table trt*sex/ outpct out = gender_stats;
+run;
+/*concatenating count and percentage*/
+data gender_stats;
+  set gender_stats;
+  value = cat(count,' (',strip(put(round(pct_row,.1),8.1)),'%)');
+  ord=3;
+  if sex = 'Male' then subord=1;
+  else subord=3;
+  run;
+data gender_stats;
+   set gender_stats;
+   rename sex = stat;
+   drop COUNT PERCENT PCT_ROW PCT_COL;
+run;
+
+/*Building race variable*/
+proc format;
+value racefmt
+1 = 'Asian'
+2 = 'African American'
+3 = 'Hispanic'
+4 = 'White'
+5 = 'Others'
+;
+run;
+data patients_race;
+   set patients_sex;
+   Race1 = put(race,racefmt.);
+run;
+/*deriving stats for race variable*/
+proc freq data = patients_race noprint;
+table trt*race1/outpct out = race_stats;
+run;
+/*concatenating count and percentage*/
+data race_stats;
+  set race_stats;
+  value = cat(count,' (',strip(put(round(pct_row,.1),8.1)),'%)');
+  ord=4;
+  if race1 = 'Asian' then subord=1;
+  if race1 = 'African American' then subord=2;
+  if race1 = 'Hispanic' then subord=3;
+  if race1 = 'White' then subord=4;
+  if race1 = 'Others' then subord=5;
+  run;
+data race_stats;
+   set race_stats;
+   rename Race1 = stat;
+   drop COUNT PERCENT PCT_ROW PCT_COL;
+run;
+/*appending all the stats together*/
+data all_stats;
+    length stat $15;
+    set age_stats age_grp_stats gender_stats race_stats;
+run;
+
+/*transposing data by treatment groups*/
+proc sort data = all_stats;
+by ord subord stat;
+run;
+
+proc transpose data = all_stats out= t_all_stats prefix=_;
+var value;
+id trt;
+by ord subord stat;
+run;
+
+/*reporting the data*/
+data final;
+  length stat $30;
+  set t_all_stats;
+  by ord subord;
+  output;
+  if first.ord then do;
+   if ord = 1 then stat ='Age (years)';
+   if ord = 2 then stat = 'Age Groups';
+   if ord = 3 then stat = 'Gender';
+   if ord = 4 then stat = 'Race';
+   subord = 0;
+   _0 ='';
+   _1 ='';
+   _2 ='';
+   output;
+   end;
+proc sql noprint;
+Select count(*) into :placebo from patients_age where trt=0;
+Select count(*) into :active from patients_age where trt=1;
+Select count(*) into :total from patients_age where trt=2;
+quit; 
+
+Title 'Table 1.1';
+Title2 'Demographic and Baseline Characteristics by Treatment Group';
+Title3 'Randomized Population';
+footnote 'Note: Percentages are based on the number of non-missing values in each treatment group.';
+proc report data = final split = '|';
+column ord subord stat _0 _1 _2;
+define ord/ noprint order;
+define subord/ noprint order;
+define stat/ display width =50"" ;
+define _0/ display width = 30 "Placebo| (n=&placebo)";
+define _1/ display width = 30 "Active Treatment| (n=&active)";
+define _2/ display width = 30 "All Patients| (n=&total)";
+run;
